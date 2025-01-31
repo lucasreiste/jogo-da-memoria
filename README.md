@@ -6,6 +6,8 @@
 Um divertido jogo da memória para testar suas habilidades!
     <br />
     <br />
+    <a href="https://jogodamemoriabtg.netlify.app/">Acessar o site</a>
+    ·
     <a href="https://github.com/lucasreiste/jogo-da-memoria/issues">Comunicar um bug</a>
     ·
     <a href="https://github.com/lucasreiste/jogo-da-memoria/issues">Pedir novas funcionalidades</a>
