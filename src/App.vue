@@ -1,100 +1,275 @@
 <template>
-  <div class="container">
-    <input type="text" v-model="nameInput" />
-    <br />
-
-    Jogador Atual: {{ nameInput }}
-    <div class="memory-game">
-      <MemoryCard
-        v-for="emoji in optionsDoubled"
-        :emoji="emoji"
-        :first-card="firstCard"
-        :second-card="secondCard"
-        :is-matched="isMatched(emoji.id)"
-        @flipped-card="flipCard"
-      />
+  <main class="game-container">
+    <div v-if="isGameWon" class="win-message">
+      Parabéns {{ playerName || "Jogador" }}! Você venceu!
+      <p>Rodadas utilizadas: {{ rounds }}</p>
+      <button class="restart-button" @click="restartGame">
+        Reiniciar Jogo
+      </button>
     </div>
 
-    {{ firstCard }}
-    {{ secondCard }}
-    {{ matchedValues }}
+    <div v-if="!isGameStarted" class="start-screen">
+      <h1>Jogo da Memória</h1>
 
-    <span v-show="userWon">Parabéns! Você ganhou</span>
-  </div>
+      <label for="playerName">Digite seu nome para iniciarmos:</label>
+      <input
+        type="text"
+        v-model="playerName"
+        placeholder="Digite seu nome"
+        class="input-name"
+      />
+      <button class="start-button" @click="startGame">Iniciar Jogo</button>
+    </div>
+
+    <div v-else class="game-content">
+      <GameHeader
+        :playerName="playerName"
+        :matchedPairs="matchedPairs"
+        :totalPairs="totalPairs"
+        :isProcessing="isProcessing"
+        :ranking="ranking"
+        @show-hint="showHint"
+        @change-user="changeUser"
+      />
+
+      <div class="memory-game">
+        <MemoryCard
+          v-for="card in cards"
+          :key="card.id"
+          :content="card"
+          :is-flipped="isCardFlipped(card)"
+          :disabled="isProcessing"
+          @flipped-card="handleCardFlip"
+        />
+      </div>
+    </div>
+  </main>
 </template>
+
 <script setup>
-import { computed, ref } from "vue";
+import { ref, computed, watch } from "vue";
 import MemoryCard from "./components/MemoryCard.vue";
+import GameHeader from "./components/GameHeader.vue";
 
-const nameInput = ref(null);
-const options = ["Y", "😁", "😂", "😃", "😄"];
+const playerName = ref("");
+const isGameStarted = ref(false);
+const cards = ref([]);
+const flippedCards = ref([]);
+const matchedCards = ref([]);
+const isProcessing = ref(false);
+const isHintActive = ref(false);
+const rounds = ref(0);
+const ranking = ref([]);
 
-const matchedValues = ref([]);
-const optionsDoubled = ref([]);
+const EMOJIS = ["😀", "😎", "🥳", "🤩", "😴", "😲", "🤯", "🤪", "😇", "😈"];
+const FLIP_DELAY = 1000;
+const HINT_DELAY = 2000;
 
-const firstCard = ref(null);
-const secondCard = ref(null);
+const matchedPairs = computed(() => matchedCards.value.length / 2);
+const totalPairs = computed(() => EMOJIS.length);
+const isGameWon = computed(() => matchedPairs.value === totalPairs.value);
 
-const shuffleCards = () => {
-  const randomCards = options.map((emoji) => ({
-    emoji,
-    id: Math.random(),
-  }));
-
-  let doubledCards = [...randomCards, ...randomCards];
-
-  doubledCards = doubledCards.map((emoji) => ({
-    ...emoji,
-    cardId: Math.random() + 1,
-  }));
-
-  doubledCards.sort(() => Math.random() - 0.5);
-  optionsDoubled.value = doubledCards;
+const isCardFlipped = (card) => {
+  return (
+    flippedCards.value.includes(card.id) ||
+    matchedCards.value.includes(card.id) ||
+    isHintActive.value
+  );
 };
 
-const flipCard = (emoji) => {
-  console.log(emoji);
-  if (!firstCard.value) {
-    firstCard.value = emoji;
+const startGame = () => {
+  isGameStarted.value = true;
+  initializeGame();
+};
+
+const initializeGame = () => {
+  const shuffledCards = [...EMOJIS, ...EMOJIS]
+    .map((emoji) => ({ id: Math.random(), emoji }))
+    .sort(() => Math.random() - 0.5);
+
+  cards.value = shuffledCards;
+  flippedCards.value = [];
+  matchedCards.value = [];
+  rounds.value = 0;
+};
+
+const handleCardFlip = (card) => {
+  if (
+    isProcessing.value ||
+    flippedCards.value.includes(card.id) ||
+    matchedCards.value.includes(card.id)
+  )
     return;
+
+  flippedCards.value.push(card.id);
+  if (flippedCards.value.length === 2) {
+    checkMatch();
+  }
+};
+
+const checkMatch = () => {
+  isProcessing.value = true;
+  rounds.value++;
+  const [firstId, secondId] = flippedCards.value;
+  const firstCard = cards.value.find((card) => card.id === firstId);
+  const secondCard = cards.value.find((card) => card.id === secondId);
+
+  if (firstCard.emoji === secondCard.emoji) {
+    matchedCards.value.push(firstId, secondId);
   }
 
-  secondCard.value = emoji;
-
-  checkResults();
-};
-
-const isMatched = (id) => {
-  return matchedValues.value.some((card) => card.id === id);
-};
-
-const checkResults = () => {
-  if (firstCard.value.id === secondCard.value.id) {
-    // Adicionando apenas os IDs únicos ao array de matches
-    if (!matchedValues.value.some((card) => card.id === firstCard.value.id)) {
-      matchedValues.value.push(firstCard.value);
-    }
-    firstCard.value = null;
-    secondCard.value = null;
-    return;
-  }
   setTimeout(() => {
-    firstCard.value = null;
-    secondCard.value = null;
-  }, 1000);
+    flippedCards.value = [];
+    isProcessing.value = false;
+  }, FLIP_DELAY);
 };
 
-const userWon = computed(() => {
-  return matchedValues.value === options.value;
+watch(isGameWon, (won) => {
+  if (won) {
+    ranking.value.push({
+      name: playerName.value || "Anônimo",
+      rounds: rounds.value,
+    });
+    ranking.value.sort((a, b) => a.rounds - b.rounds);
+  }
 });
 
-shuffleCards();
+const showHint = () => {
+  isHintActive.value = true;
+  setTimeout(() => {
+    isHintActive.value = false;
+  }, HINT_DELAY);
+};
+
+const restartGame = () => {
+  playerName.value = "";
+  rounds.value = 0;
+  isGameStarted.value = false;
+  initializeGame();
+};
+
+const changeUser = () => {
+  playerName.value = "";
+  isGameStarted.value = false;
+};
 </script>
+
 <style>
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #69aedb;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+.game-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.start-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+
+.input-name {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.start-button {
+  width: auto;
+  min-width: 100px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #3498db;
+  color: white;
+  cursor: pointer;
+}
+
+.start-button:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+}
+
+.game-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
 .memory-game {
+  flex: 1;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  margin: 100px;
-  gap: 10px;
+  gap: 30px;
+  padding: 20px;
+  margin: 0 auto;
+  width: auto;
+  grid-template-columns: repeat(5, 100px);
+  justify-content: center;
+  grid-auto-rows: 100px;
+}
+
+@media (max-width: 768px) {
+  .memory-game {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+  }
+}
+
+@media (max-width: 500px) {
+  .memory-game {
+    grid-template-columns: repeat(3, 100px);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .memory-game {
+    grid-template-columns: repeat(2, 100px);
+    gap: 10px;
+  }
+}
+
+.processing-message {
+  text-align: center;
+  padding: 10px;
+  background: rgba(44, 62, 80, 0.9);
+}
+
+.win-message {
+  text-align: center;
+  padding: 20px;
+}
+
+.restart-button {
+  width: auto;
+  min-width: 100px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #3498db;
+  color: white;
+  cursor: pointer;
+}
+
+.restart-button:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+}
+
+.ranking-section {
+  text-align: center;
+  margin-top: 20px;
 }
 </style>
